@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOP 웹 비디오 편집기</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 커스텀 스크롤바 & 폼 스타일 */
+    body { background-color: #0E0F10; color: #E4E4E6; user-select: none; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3A3B3E; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
+    
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    input[type=range] { -webkit-appearance: none; background: #3A3B3E; height: 4px; border-radius: 2px; outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #06b6d4; cursor: pointer; }
+    input[type=number], input[type=text], input[type=password] { background-color: #0A0A0A; border: 1px solid #3A3B3E; color: white; border-radius: 4px; outline: none; transition: border-color 0.2s; }
+    input[type=number]:focus, input[type=text]:focus, input[type=password]:focus { border-color: #06b6d4; }
+    
+    .timeline-track-bg { background-image: repeating-linear-gradient(45deg, #164040 0, #164040 2px, transparent 2px, transparent 8px); }
+    #preview-wrapper { aspect-ratio: 16 / 9; max-width: 100%; max-height: 100%; }
+  </style>
+</head>
+<body class="bg-[#0E0F10] overflow-hidden font-sans text-sm w-full h-screen relative">
+
+  <!-- ========================================== -->
+  <!-- 공통 알림 모달 (alert / confirm 대체)      -->
+  <!-- ========================================== -->
+  <div id="custom-modal" class="fixed inset-0 bg-black/80 z-[3000] hidden flex items-center justify-center">
+    <div class="bg-[#18191B] border border-[#3A3B3E] rounded-lg p-6 max-w-sm w-full text-center shadow-2xl">
+      <p id="custom-modal-msg" class="text-white mb-6 text-sm whitespace-pre-line"></p>
+      
+      <!-- 프로젝트 이름 입력용 필드 (저장 시 사용) -->
+      <input type="text" id="custom-modal-input" class="hidden w-full px-3 py-2 text-sm bg-[#0A0A0A] border border-[#3A3B3E] rounded mb-4 focus:border-cyan-500 outline-none" placeholder="프로젝트 이름 입력">
+
+      <div class="flex gap-3 justify-center">
+        <button id="custom-modal-cancel" class="px-6 py-2 rounded bg-[#2A2B2E] text-white hover:bg-[#3A3B3E] transition-colors hidden text-sm font-medium">취소</button>
+        <button id="custom-modal-ok" class="px-6 py-2 rounded bg-cyan-500 text-black hover:bg-cyan-400 transition-colors text-sm font-bold">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단축키 모달 -->
+  <div id="shortcut-modal" class="fixed inset-0 bg-black/80 z-[3000] hidden flex items-center justify-center">
+    <div class="bg-[#18191B] border border-[#3A3B3E] rounded-lg p-6 max-w-md w-full shadow-2xl relative">
+      <button onclick="closeShortcutModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="keyboard" class="w-5 h-5 text-cyan-400"></i> 단축키 안내</h2>
+      <div class="space-y-2 text-sm text-gray-300">
+        <div class="flex justify-between items-center bg-[#232427] p-2 rounded"><span class="font-medium">재생 / 일시정지</span> <kbd class="bg-black border border-gray-700 px-2 py-1 rounded text-xs">Space</kbd></div>
+        <div class="flex justify-between items-center bg-[#232427] p-2 rounded"><span class="font-medium">1초 앞으로 이동</span> <kbd class="bg-black border border-gray-700 px-2 py-1 rounded text-xs">→ (우측 방향키)</kbd></div>
+        <div class="flex justify-between items-center bg-[#232427] p-2 rounded"><span class="font-medium">1초 뒤로 이동</span> <kbd class="bg-black border border-gray-700 px-2 py-1 rounded text-xs">← (좌측 방향키)</kbd></div>
+        <div class="flex justify-between items-center bg-[#232427] p-2 rounded"><span class="font-medium">선택된 텍스트/이미지 삭제</span> <kbd class="bg-black border border-gray-700 px-2 py-1 rounded text-xs">Delete / Backspace</kbd></div>
+        <div class="flex justify-between items-center bg-[#232427] p-2 rounded"><span class="font-medium">전체 화면 토글</span> <kbd class="bg-black border border-gray-700 px-2 py-1 rounded text-xs">ESC</kbd></div>
+      </div>
+      <button onclick="closeShortcutModal()" class="mt-6 w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-2.5 rounded transition-colors">확인</button>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 1. HOME SCREEN (홈 화면)                   -->
+  <!-- ========================================== -->
+  <div id="home-screen" class="flex flex-col h-screen w-full absolute inset-0 z-50 bg-[#0E0F10]">
+    
+    <!-- Top nav (Dashboard Style) -->
+    <div class="border-b border-[#2A2B2E] bg-[#141517]">
+      <div class="flex justify-between items-center px-8 py-4 max-w-7xl mx-auto w-full">
+        <div class="font-bold text-2xl tracking-tight text-white flex items-center gap-2">
+          <span class="bg-cyan-500 text-black px-2 py-0.5 rounded text-lg">N</span> NOP Workspace
+        </div>
+        <div class="flex items-center gap-4">
+          <!-- 데모 배지 -->
+          <span id="demo-badge" class="px-2.5 py-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 rounded flex items-center gap-1.5 text-xs font-bold transition-all">
+            <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> 클라우드 연결중...
+          </span>
+          
+          <!-- 로그인 안 된 상태의 버튼들 -->
+          <div id="auth-buttons" class="hidden items-center gap-2">
+            <button onclick="openLoginModal()" class="text-xs font-medium text-gray-400 hover:text-white transition px-2 hidden sm:block">로그인</button>
+            <button onclick="openSignupModal()" class="text-xs font-bold bg-[#E4E4E6] text-black px-4 py-1.5 rounded hover:bg-white transition hidden sm:block">회원가입</button>
+          </div>
+
+          <!-- 로그인 된 상태의 프로필 -->
+          <div id="auth-profile" class="hidden items-center gap-3">
+            <span id="profile-greeting" class="text-xs text-gray-300 hidden sm:block"></span>
+            <button onclick="handleLogout()" class="w-8 h-8 bg-gradient-to-tr from-cyan-400 to-blue-500 rounded-full flex items-center justify-center text-black font-bold text-sm cursor-pointer shadow-lg shadow-cyan-500/20 transition-transform hover:scale-105" title="로그아웃">
+              <span id="profile-initial">U</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-5xl mx-auto w-full space-y-12">
+        
+        <!-- Hero Section -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div onclick="startNewProject()" class="md:col-span-2 bg-gradient-to-br from-[#18191B] to-[#1A262E] border border-[#2A2B2E] hover:border-cyan-500 rounded-2xl p-8 cursor-pointer hover:shadow-[0_0_30px_rgba(6,182,212,0.1)] transition-all group flex items-center gap-8">
+            <div class="w-20 h-20 bg-cyan-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform group-hover:bg-cyan-500/20">
+              <i data-lucide="video" class="w-10 h-10 text-cyan-400"></i>
+            </div>
+            <div>
+              <h2 class="text-3xl font-bold text-white mb-3 group-hover:text-cyan-400 transition-colors">새 프로젝트 만들기</h2>
+              <p class="text-gray-400 text-sm">빈 캔버스에서 새로운 비디오 편집을 시작하거나 미디어를 가져오세요.</p>
+            </div>
+            <div class="ml-auto w-12 h-12 rounded-full bg-[#2A2B2E] flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-black transition-colors">
+              <i data-lucide="arrow-right" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div onclick="scrollToProjects()" class="bg-[#18191B] border border-[#2A2B2E] rounded-2xl p-8 cursor-pointer hover:bg-[#232427] hover:border-[#3A3B3E] transition-all flex flex-col justify-center items-center text-center gap-4">
+            <div class="w-14 h-14 bg-[#2A2B2E] rounded-full flex items-center justify-center">
+              <i data-lucide="library" class="w-6 h-6 text-gray-300"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-white text-lg">내 프로젝트 보기</h3>
+              <p class="text-xs text-gray-500 mt-1">클라우드 저장소 열기</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Tools -->
+        <div>
+          <h3 class="text-lg font-bold text-white mb-4">빠른 도구 (바로 미디어 업로드)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+            <div onclick="triggerQuickTool('cut')" class="bg-[#18191B] border border-[#2A2B2E] rounded-xl p-5 hover:border-cyan-500 hover:text-cyan-400 cursor-pointer transition-all flex items-center gap-4 hover:-translate-y-1 hover:shadow-lg">
+              <div class="w-10 h-10 bg-[#232427] rounded-lg flex items-center justify-center"><i data-lucide="scissors" class="w-5 h-5 text-cyan-400"></i></div>
+              <span class="font-medium text-gray-200 transition-colors">빠른 컷편집</span>
+            </div>
+            <div onclick="triggerQuickTool('autoColor')" class="bg-[#18191B] border border-[#2A2B2E] rounded-xl p-5 hover:border-purple-400 hover:text-purple-400 cursor-pointer transition-all flex items-center gap-4 hover:-translate-y-1 hover:shadow-lg">
+              <div class="w-10 h-10 bg-[#232427] rounded-lg flex items-center justify-center"><i data-lucide="wand-2" class="w-5 h-5 text-purple-400"></i></div>
+              <span class="font-medium text-gray-200 transition-colors">자동 색보정</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Projects (내가 만든 프로젝트) -->
+        <div id="recent-projects-section" class="hidden pb-12">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="cloud" class="w-5 h-5 text-cyan-400"></i> 클라우드 프로젝트 목록</h3>
+          </div>
+          <div class="w-full bg-[#18191B] rounded-xl border border-[#2A2B2E] overflow-hidden">
+            <div class="grid grid-cols-12 gap-4 p-4 border-b border-[#2A2B2E] text-xs font-medium text-gray-500 bg-[#141517]">
+              <div class="col-span-6">프로젝트 이름</div><div class="col-span-3">마지막 저장일시</div><div class="col-span-3 text-right">작업</div>
+            </div>
+            
+            <div id="projects-list-container" class="flex flex-col">
+              <div class="flex flex-col items-center justify-center py-16 text-center">
+                <i data-lucide="folder-open" class="w-8 h-8 text-gray-500 mb-4"></i>
+                <p class="text-gray-300 font-medium text-base">저장된 프로젝트를 불러오는 중입니다...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 2. EDITOR SCREEN (편집기 화면)             -->
+  <!-- ========================================== -->
+  <div id="editor-screen" class="hidden flex-col h-screen w-full absolute inset-0 z-40 bg-[#0E0F10]">
+    
+    <!-- Header -->
+    <header class="h-14 bg-[#18191B] border-b border-[#2A2B2E] flex items-center justify-between px-4 shrink-0">
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2 relative">
+          <button id="btn-menu" class="text-gray-400 hover:text-white cursor-pointer p-1 focus:outline-none">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          
+          <!-- 드롭다운 메뉴 -->
+          <div id="dropdown-menu" class="absolute top-10 left-0 w-40 bg-[#18191B] border border-[#3A3B3E] rounded shadow-xl hidden z-[100]">
+            <ul class="py-1 text-sm text-gray-300">
+              <li class="px-4 py-2 hover:bg-[#2A2B2E] cursor-pointer flex items-center gap-2" onclick="goHome()"><i data-lucide="home" class="w-4 h-4"></i> 홈 화면으로</li>
+              <li class="px-4 py-2 hover:bg-[#2A2B2E] cursor-pointer flex items-center gap-2" onclick="newProject()"><i data-lucide="folder-plus" class="w-4 h-4"></i> 새 프로젝트</li>
+              <li class="px-4 py-2 hover:bg-[#2A2B2E] cursor-pointer flex items-center gap-2" onclick="saveProject()"><i data-lucide="cloud-upload" class="w-4 h-4 text-cyan-400"></i> 클라우드 저장</li>
+            </ul>
+          </div>
+
+          <span class="font-bold text-xl tracking-tight text-white flex items-center gap-1 ml-2 pointer-events-none">
+            <span class="bg-cyan-500 text-black px-1.5 py-0.5 rounded-sm text-sm">N</span> NOP
+          </span>
+        </div>
+        <div class="text-xs text-gray-500 mt-1 flex items-center gap-2">
+          <span id="editor-project-name">새 프로젝트</span>
+          <span id="editor-status-badge" class="bg-[#232427] text-gray-400 px-1.5 py-0.5 rounded border border-[#3A3B3E]">무료 데모 (저장 불가)</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <button onclick="openGuide()" class="flex items-center gap-1.5 px-3 py-1.5 text-cyan-400 hover:bg-[#2A2B2E] rounded transition-colors border border-cyan-900/50">
+          <i data-lucide="help-circle" class="w-4 h-4"></i> 가이드
+        </button>
+        <button onclick="openShortcutModal()" class="flex items-center gap-1.5 px-3 py-1.5 text-gray-300 hover:bg-[#2A2B2E] rounded transition-colors cursor-pointer">
+          <i data-lucide="keyboard" class="w-4 h-4"></i> Shortcut
+        </button>
+        <button id="btn-export" class="flex items-center gap-1.5 px-6 py-1.5 rounded font-medium transition-all bg-[#2A2B2E] text-gray-500 cursor-not-allowed">
+          <i data-lucide="download" class="w-4 h-4"></i> <span id="export-text">Export</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Middle Workspace -->
+    <div class="flex flex-1 min-h-0">
+      
+      <!-- Left Panel -->
+      <aside class="w-72 bg-[#18191B] border-r border-[#2A2B2E] flex flex-col shrink-0">
+        <div class="flex justify-around items-center border-b border-[#2A2B2E] p-2 text-xs text-gray-400">
+          <button onclick="setLeftTab('media')" id="tab-media" class="flex flex-col items-center gap-1 p-2 rounded hover:text-cyan-400 text-cyan-400"><i data-lucide="video" class="w-4 h-4"></i> Media</button>
+          <button onclick="setLeftTab('audio')" id="tab-audio" class="flex flex-col items-center gap-1 p-2 rounded hover:text-cyan-400"><i data-lucide="music" class="w-4 h-4"></i> Audio</button>
+          <button onclick="setLeftTab('text')" id="tab-text" class="flex flex-col items-center gap-1 p-2 rounded hover:text-cyan-400"><i data-lucide="type" class="w-4 h-4"></i> Text</button>
+          <button onclick="setLeftTab('effects')" id="tab-effects" class="flex flex-col items-center gap-1 p-2 rounded hover:text-cyan-400"><i data-lucide="sparkles" class="w-4 h-4"></i> Effects</button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col" id="left-panel-content"></div>
+      </aside>
+
+      <!-- Center Panel: Player Canvas -->
+      <main class="flex-1 bg-[#0A0A0A] flex flex-col relative min-w-[300px]">
+        <div id="preview-container" class="flex-1 flex items-center justify-center p-4 relative overflow-hidden bg-[#0A0A0A]">
+          <canvas id="export-canvas" class="hidden"></canvas>
+          <div id="empty-state" class="text-gray-600 flex flex-col items-center gap-2 text-center">
+            <i data-lucide="video" class="w-12 h-12 opacity-20 mx-auto"></i>
+            <span>좌측에서 미디어를 업로드 하세요.<br/><span class="text-[10px] text-gray-500">(클라우드에서 불러왔을 경우, 사용했던 원본 영상을 다시 업로드해야 연결됩니다.)</span></span>
+          </div>
+          <div id="preview-wrapper" class="relative bg-black flex items-center justify-center hidden shadow-2xl ring-1 ring-[#2A2B2E]">
+            <video id="main-video" class="w-full h-full object-contain pointer-events-auto" playsinline></video>
+            <!-- 숨겨진 배경음악 플레이어 -->
+            <audio id="bg-audio" class="hidden"></audio>
+            
+            <div id="overlay-container" class="absolute inset-0 pointer-events-none overflow-hidden z-40"></div>
+            <button id="btn-fullscreen" class="absolute bottom-3 right-3 bg-black/60 hover:bg-cyan-500 hover:text-black text-white p-2 rounded transition-colors z-50 pointer-events-auto" title="전체 화면">
+              <i data-lucide="maximize" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Player Controls -->
+        <div class="h-12 bg-[#0A0A0A] flex items-center justify-between px-6 shrink-0 text-gray-400 border-t border-[#18191B]">
+          <div class="flex items-center gap-2 font-mono text-xs text-cyan-400">
+            <span id="time-current">00:00:00:00</span>
+            <span class="text-gray-600">/</span>
+            <span id="time-duration" class="text-gray-500">00:00:00:00</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <button id="btn-play" class="hover:text-white transition-colors">
+              <i data-lucide="play" id="icon-play" class="w-5 h-5 fill-current"></i>
+            </button>
+          </div>
+          <div class="w-20 text-right text-xs">
+            <span id="audio-status-text" class="text-green-400 hidden"><i data-lucide="music" class="w-3 h-3 inline"></i> BGM 적용됨</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right Panel: Properties -->
+      <aside class="w-80 bg-[#18191B] border-l border-[#2A2B2E] flex flex-col shrink-0">
+        <div class="flex border-b border-[#2A2B2E] px-2 pt-2 text-sm font-medium">
+          <button onclick="setRightTab('video')" id="rtab-video" class="px-4 py-2 border-b-2 border-cyan-400 text-cyan-400 transition-colors">Video</button>
+          <button onclick="setRightTab('adjust')" id="rtab-adjust" class="px-4 py-2 border-b-2 border-transparent text-gray-400 hover:text-white transition-colors">Adjust</button>
+          <button onclick="setRightTab('text')" id="rtab-text" class="px-4 py-2 border-b-2 border-transparent text-gray-400 hover:text-white transition-colors">Overlays</button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-6" id="right-panel-content"></div>
+      </aside>
+    </div>
+
+    <!-- Bottom Timeline Panel -->
+    <div class="h-[250px] bg-[#141517] border-t border-[#000] flex flex-col shrink-0">
+      <div class="flex-1 relative overflow-x-hidden overflow-y-auto p-2 select-none" id="timeline-scroll">
+        <div id="timeline-empty" class="h-full flex items-center justify-center text-gray-600 text-xs">
+          타임라인이 비어 있습니다. 미디어를 가져오세요.
+        </div>
+        <div id="timeline-container" class="relative w-full h-full min-w-[800px] cursor-text hidden">
+          <div id="timeline-ruler" class="h-6 mb-2 border-b border-gray-800 flex items-end text-[10px] text-gray-600 font-mono overflow-hidden pointer-events-none"></div>
+          <div class="space-y-1 relative pt-2" id="timeline-tracks">
+            <div id="timeline-overlays"></div>
+            <div class="h-16 bg-[#18191B] rounded relative flex items-center overflow-hidden mt-2 pointer-events-none">
+              <div class="absolute inset-0 bg-gray-800 opacity-20"></div>
+              <div id="trim-bar" class="absolute h-full border-y-2 border-cyan-500 bg-[#205151] pointer-events-auto shadow-lg">
+                <div id="trim-start-handle" class="absolute left-0 top-0 bottom-0 w-3 bg-cyan-500 cursor-ew-resize flex items-center justify-center z-10 hover:bg-cyan-400">
+                  <div class="w-0.5 h-4 bg-black rounded-full"></div>
+                </div>
+                <div class="absolute inset-0 flex opacity-40 mx-3 pointer-events-none timeline-track-bg"></div>
+                <div id="trim-end-handle" class="absolute right-0 top-0 bottom-0 w-3 bg-cyan-500 cursor-ew-resize flex items-center justify-center z-10 hover:bg-cyan-400">
+                  <div class="w-0.5 h-4 bg-black rounded-full"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="playhead" class="absolute top-0 bottom-0 w-[1px] bg-white z-50 pointer-events-none shadow-[0_0_4px_#fff]">
+            <div class="absolute -top-1 -left-1.5 w-3 h-3 bg-white border-2 border-cyan-500 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 가이드 모달 -->
+  <div id="guide-modal" class="fixed inset-0 bg-black/80 z-[1000] hidden flex items-center justify-center">
+    <div class="bg-[#18191B] border border-[#3A3B3E] rounded-lg p-6 max-w-md w-full text-gray-200 shadow-2xl relative">
+      <button onclick="closeGuide()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-2"><i data-lucide="info" class="w-5 h-5 text-cyan-400"></i> NOP 사용 가이드</h2>
+      <ul class="list-disc pl-5 space-y-3 text-sm text-gray-300">
+        <li><strong>미디어 가져오기:</strong> 좌측 패널에서 비디오를 업로드하세요.</li>
+        <li><strong>영상 자르기:</strong> 하단 타임라인의 파란색 핸들을 드래그해 길이를 조절하세요.</li>
+        <li><strong>필터 및 이펙트:</strong> 우측 'Adjust' 탭이나 좌측 'Effects' 탭에서 영상 톤을 보정할 수 있습니다.</li>
+        <li><strong>배경음악 추가:</strong> 좌측 'Audio' 탭에서 원하는 음악을 추가할 수 있습니다.</li>
+        <li><strong>오버레이:</strong> 좌측 'Text' 탭에서 자막이나 로고를 추가하고 화면에서 <strong>드래그 이동</strong> 하세요.</li>
+      </ul>
+      <button onclick="closeGuide()" class="mt-6 w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-2.5 rounded transition-colors">확인</button>
+    </div>
+  </div>
+
+  <!-- 회원가입/로그인 모달 -->
+  <div id="signup-modal" class="fixed inset-0 bg-black/80 z-[2000] hidden flex items-center justify-center">
+    <div class="bg-[#18191B] border border-[#3A3B3E] rounded-lg p-8 max-w-sm w-full text-gray-200 shadow-2xl relative">
+      <button onclick="closeSignupModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h2 class="text-2xl font-bold text-white mb-2 text-center">회원가입</h2>
+      <p class="text-xs text-gray-500 text-center mb-6">클라우드 저장 등 모든 기능을 이용해보세요.</p>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">아이디</label>
+          <input type="text" id="signup-id" placeholder="영어로만 입력" class="w-full px-3 py-2.5 text-sm">
+          <p id="signup-id-error" class="text-red-400 text-[11px] mt-1.5 hidden"></p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-400 mb-1.5">비밀번호</label>
+          <input type="password" id="signup-pw" placeholder="대/소문자, 숫자, 특수문자 포함" class="w-full px-3 py-2.5 text-sm">
+          <p id="signup-pw-error" class="text-red-400 text-[11px] mt-1.5 hidden"></p>
+        </div>
+        <button onclick="handleSignup()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded transition-colors mt-2">가입하기</button>
+      </div>
+      <div class="mt-4 text-center text-xs text-gray-500">
+        이미 계정이 있으신가요? <button onclick="closeSignupModal(); openLoginModal();" class="text-cyan-400 hover:underline">로그인</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="login-modal" class="fixed inset-0 bg-black/80 z-[2000] hidden flex items-center justify-center">
+    <div class="bg-[#18191B] border border-[#3A3B3E] rounded-lg p-8 max-w-sm w-full text-gray-200 shadow-2xl relative">
+      <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h2 class="text-2xl font-bold text-white mb-6 text-center">로그인</h2>
+      <div class="space-y-4">
+        <div><input type="text" id="login-id" placeholder="아이디" class="w-full px-3 py-2.5 text-sm"></div>
+        <div>
+          <input type="password" id="login-pw" placeholder="비밀번호" class="w-full px-3 py-2.5 text-sm">
+          <p id="login-error" class="text-red-400 text-[11px] mt-2 hidden"></p>
+        </div>
+        <button onclick="handleLogin()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded transition-colors mt-2">로그인</button>
+      </div>
+      <div class="mt-4 text-center text-xs text-gray-500">
+        계정이 없으신가요? <button onclick="closeLoginModal(); openSignupModal();" class="text-cyan-400 hover:underline">회원가입</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 보이지 않는 인풋 -->
+  <input type="file" id="upload-video" accept="video/*" class="hidden">
+  <input type="file" id="upload-image" accept="image/*" class="hidden">
+  <input type="file" id="upload-audio" accept="audio/*" class="hidden">
+
+  <!-- Core JS & Firebase 연동 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Firebase 환경 설정
+    let firebaseConfig = {};
+    try { if (typeof __firebase_config !== 'undefined') firebaseConfig = JSON.parse(__firebase_config); } catch (e) {}
+    
+    const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
+    const auth = app ? getAuth(app) : null;
+    const db = app ? getFirestore(app) : null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+    let fbUser = null; 
+
+    // State 관리
+    const state = {
+      loggedInUser: null, currentProjectId: null, currentProjectName: '새 프로젝트', pendingQuickTool: null,
+      videoFile: null, videoUrl: '', duration: 0, currentTime: 0, isPlaying: false,
+      bgAudioUrl: '', bgAudioVolume: 50,
+      trimStart: 0, trimEnd: 100, filters: { brightness: 100, contrast: 100, saturation: 100, grayscale: 0 },
+      overlays: [], leftTab: 'media', rightTab: 'video', isExporting: false, exportProgress: 0,
+      draggingOverlayId: null, draggingTrim: null, isDraggingTime: false, isFullscreen: false,
+      isAutoLoggingIn: false
+    };
+
+    window.updateIcons = () => { if (window.lucide) window.lucide.createIcons(); };
+    window.updateIcons();
+
+    // Firebase Auto Auth
+    if (auth && db) {
+      const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } 
+          else { await signInAnonymously(auth); }
+        } catch (e) { console.error("Auth 에러", e); }
+      };
+      initAuth();
+
+      onAuthStateChanged(auth, (user) => {
+        fbUser = user;
+        if (user) {
+          const sessionRef = doc(db, 'artifacts', appId, 'users', user.uid, 'session', 'current');
+          onSnapshot(sessionRef, async (docSnap) => {
+            if (docSnap.exists() && docSnap.data().activeId) {
+              state.loggedInUser = docSnap.data().activeId;
+              window.fetchProjectsList();
+            } else { 
+              state.loggedInUser = null; 
+              const savedAuth = localStorage.getItem('nop_saved_auth');
+              if (savedAuth && !state.isAutoLoggingIn) {
+                state.isAutoLoggingIn = true;
+                try {
+                  const { id, pw } = JSON.parse(savedAuth);
+                  const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'registered_users');
+                  const snap = await getDocs(usersRef);
+                  const matchedUser = snap.docs.map(d => d.data()).find(u => u.id === id && u.pw === pw);
+                  if (matchedUser) { await setDoc(sessionRef, { activeId: id }); } 
+                  else { localStorage.removeItem('nop_saved_auth'); }
+                } catch(e) { console.error("자동 로그인 실패", e); }
+                finally { state.isAutoLoggingIn = false; }
+              }
+            }
+            window.checkLoginState();
+          });
+        } else { state.loggedInUser = null; window.checkLoginState(); }
+      });
+    }
+
+    // --- 공통 모달 및 단축키 모달 ---
+    let confirmCallback = null;
+    window.showModal = (msg, isConfirm, requireInput, onConfirm) => {
+      document.getElementById('custom-modal-msg').innerText = msg;
+      const cancelBtn = document.getElementById('custom-modal-cancel'); const inputEl = document.getElementById('custom-modal-input');
+      if (isConfirm || requireInput) cancelBtn.classList.remove('hidden'); else cancelBtn.classList.add('hidden');
+      if (requireInput) { inputEl.classList.remove('hidden'); inputEl.value = state.currentProjectName; } else { inputEl.classList.add('hidden'); }
+      document.getElementById('custom-modal').classList.remove('hidden');
+      confirmCallback = () => { const val = requireInput ? inputEl.value.trim() : null; if (onConfirm) onConfirm(val); };
+    };
+    window.closeCustomModal = () => { document.getElementById('custom-modal').classList.add('hidden'); confirmCallback = null; };
+    document.getElementById('custom-modal-cancel').addEventListener('click', window.closeCustomModal);
+    document.getElementById('custom-modal-ok').addEventListener('click', () => { if (confirmCallback) confirmCallback(); window.closeCustomModal(); });
+
+    window.openShortcutModal = () => document.getElementById('shortcut-modal').classList.remove('hidden');
+    window.closeShortcutModal = () => document.getElementById('shortcut-modal').classList.add('hidden');
+
+    // --- 키보드 단축키 이벤트 ---
+    document.addEventListener('keydown', (e) => {
+      // 인풋 필드나 텍스트 에어리어에서 타이핑 중일 때는 단축키 무시
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || state.isExporting) return;
+      
+      if (e.key === ' ' || e.code === 'Space') { 
+        e.preventDefault(); window.togglePlay(); 
+      }
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (state.draggingOverlayId) { window.removeOverlay(state.draggingOverlayId); }
+      }
+      else if (e.key === 'ArrowLeft') {
+        if(videoEl && state.videoUrl) { videoEl.currentTime = Math.max(0, videoEl.currentTime - 1); }
+      }
+      else if (e.key === 'ArrowRight') {
+        if(videoEl && state.videoUrl) { videoEl.currentTime = Math.min(state.duration, videoEl.currentTime + 1); }
+      }
+      else if (e.key === 'Escape') {
+        if (state.isFullscreen) { document.getElementById('btn-fullscreen').click(); }
+        window.closeShortcutModal();
+      }
+    });
+
+    // --- 화면 전환 & 기본 로직 ---
+    window.startNewProject = () => {
+      document.getElementById('home-screen').classList.add('hidden'); document.getElementById('home-screen').classList.remove('flex');
+      document.getElementById('editor-screen').classList.remove('hidden'); document.getElementById('editor-screen').classList.add('flex');
+      document.getElementById('editor-project-name').innerText = state.currentProjectName;
+    };
+    window.scrollToProjects = () => {
+      const section = document.getElementById('recent-projects-section');
+      if(section.classList.contains('hidden')) { window.showModal("로그인 후 이용할 수 있는 기능입니다.", false, false, null); } else { section.scrollIntoView({ behavior: 'smooth' }); }
+    };
+
+    const dropdownMenu = document.getElementById('dropdown-menu');
+    document.getElementById('btn-menu').addEventListener('click', (e) => { e.stopPropagation(); dropdownMenu.classList.toggle('hidden'); });
+    document.addEventListener('click', () => dropdownMenu.classList.add('hidden'));
+
+    window.goHome = () => {
+      dropdownMenu.classList.add('hidden');
+      if (state.videoUrl) { window.showModal("홈 화면으로 가시겠습니까?\n(저장하지 않은 변경사항은 사라질 수 있습니다.)", true, false, executeGoHome); } 
+      else { executeGoHome(); }
+    };
+    function executeGoHome() {
+      if (videoEl) { videoEl.pause(); state.isPlaying = false; const iconPlay = document.getElementById('icon-play'); if(iconPlay) iconPlay.setAttribute('data-lucide', 'play'); window.updateIcons(); }
+      const bgAudio = document.getElementById('bg-audio'); if (bgAudio) bgAudio.pause();
+      document.getElementById('editor-screen').classList.add('hidden'); document.getElementById('editor-screen').classList.remove('flex');
+      document.getElementById('home-screen').classList.remove('hidden'); document.getElementById('home-screen').classList.add('flex');
+    }
+    window.newProject = () => { dropdownMenu.classList.add('hidden'); window.showModal("진행 중인 작업이 초기화됩니다. 새 프로젝트를 시작하시겠습니까?", true, false, () => { location.reload(); }); };
+
+    // --- 빠른 도구 로직 ---
+    window.triggerQuickTool = (toolName) => {
+      state.pendingQuickTool = toolName; document.getElementById('upload-video').click();
+    };
+
+    // --- Firebase 클라우드 저장 및 불러오기 ---
+    window.saveProject = async () => {
+      dropdownMenu.classList.add('hidden');
+      if (!fbUser || !state.loggedInUser) { window.showModal("로그인이 필요한 기능입니다.", false, false, null); return; }
+      if (!state.videoUrl) { window.showModal("저장할 미디어가 없습니다.", false, false, null); return; }
+
+      window.showModal("저장할 프로젝트 이름을 입력하세요:", true, true, async (projectName) => {
+        if (!projectName) return;
+        state.currentProjectName = projectName; document.getElementById('editor-project-name').innerText = projectName;
+        const projectId = state.currentProjectId || 'proj_' + Date.now(); state.currentProjectId = projectId;
+        const safeOverlays = state.overlays.filter(o => o.type === 'text');
+        const projectRef = doc(db, 'artifacts', appId, 'users', fbUser.uid, 'projects', projectId);
+        const data = { id: projectId, name: projectName, trimStart: state.trimStart, trimEnd: state.trimEnd, filters: state.filters, overlays: safeOverlays, savedAt: new Date().toISOString() };
+
+        try { await setDoc(projectRef, data); window.showModal(`'${projectName}' 프로젝트가 클라우드에 안전하게 저장되었습니다.`, false, false, null); window.fetchProjectsList(); } 
+        catch (e) { window.showModal("저장 중 오류가 발생했습니다.", false, false, null); }
+      });
+    };
+
+    window.fetchProjectsList = async () => {
+      if (!fbUser || !state.loggedInUser) return;
+      const section = document.getElementById('recent-projects-section'); const listContainer = document.getElementById('projects-list-container');
+      section.classList.remove('hidden');
+      try {
+        const projectsRef = collection(db, 'artifacts', appId, 'users', fbUser.uid, 'projects');
+        const snap = await getDocs(projectsRef);
+        if (snap.empty) { listContainer.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-center"><i data-lucide="folder-open" class="w-8 h-8 text-gray-500 mb-4"></i><p class="text-gray-300 font-medium text-base">최근 작업한 프로젝트가 없습니다.</p></div>`; } 
+        else {
+          let html = ''; const docs = []; snap.forEach(d => docs.push(d.data())); docs.sort((a,b) => new Date(b.savedAt) - new Date(a.savedAt));
+          docs.forEach(data => {
+            const dateStr = new Date(data.savedAt).toLocaleString();
+            html += `<div class="grid grid-cols-12 gap-4 p-4 border-b border-[#2A2B2E] text-sm text-gray-300 hover:bg-[#232427] items-center transition-colors"><div class="col-span-6 font-medium text-white flex items-center gap-3"><i data-lucide="video" class="w-4 h-4 text-cyan-500"></i> ${data.name}</div><div class="col-span-3 text-gray-500 text-xs">${dateStr}</div><div class="col-span-3 text-right"><button onclick="loadProjectById('${data.id}')" class="px-4 py-1.5 bg-cyan-500/10 text-cyan-400 rounded hover:bg-cyan-500 transition-colors text-xs font-bold hover:text-black">열기</button></div></div>`;
+          });
+          listContainer.innerHTML = html;
+        }
+        window.updateIcons();
+      } catch(e) { console.error(e); }
+    };
+
+    window.loadProjectById = async (projectId) => {
+      if (!fbUser || !state.loggedInUser) return;
+      try {
+        const projectRef = doc(db, 'artifacts', appId, 'users', fbUser.uid, 'projects', projectId);
+        const snap = await getDoc(projectRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          state.currentProjectId = data.id; state.currentProjectName = data.name;
+          state.trimStart = data.trimStart || 0; state.trimEnd = data.trimEnd || 100;
+          state.filters = data.filters || { brightness: 100, contrast: 100, saturation: 100, grayscale: 0 };
+          state.overlays = data.overlays || [];
+          
+          window.showModal(`[${data.name}]\n클라우드 데이터를 불러왔습니다.\n해당 편집에 사용했던 원본 영상을 좌측 패널에서 다시 업로드해주시면 연결됩니다.`, false, false, () => {
+            window.startNewProject();
+          });
+        }
+      } catch(e) { window.showModal("데이터를 불러오는 중 오류가 발생했습니다.", false, false, null); }
+    };
+
+    window.openGuide = () => document.getElementById('guide-modal').classList.remove('hidden');
+    window.closeGuide = () => document.getElementById('guide-modal').classList.add('hidden');
+
+    // --- 인증 (로그인/회원가입) 모달 ---
+    window.openSignupModal = () => { document.getElementById('signup-id').value = ''; document.getElementById('signup-pw').value = ''; document.getElementById('signup-id-error').classList.add('hidden'); document.getElementById('signup-pw-error').classList.add('hidden'); document.getElementById('signup-modal').classList.remove('hidden'); window.updateIcons(); };
+    window.closeSignupModal = () => document.getElementById('signup-modal').classList.add('hidden');
+    window.openLoginModal = () => { const savedAuth = localStorage.getItem('nop_saved_auth'); if (savedAuth) { const { id, pw } = JSON.parse(savedAuth); document.getElementById('login-id').value = id; document.getElementById('login-pw').value = pw; } else { document.getElementById('login-id').value = ''; document.getElementById('login-pw').value = ''; } document.getElementById('login-error').classList.add('hidden'); document.getElementById('login-modal').classList.remove('hidden'); window.updateIcons(); };
+    window.closeLoginModal = () => document.getElementById('login-modal').classList.add('hidden');
+
+    window.handleSignup = async () => {
+      const id = document.getElementById('signup-id').value.trim(); const pw = document.getElementById('signup-pw').value;
+      const errId = document.getElementById('signup-id-error'); const errPw = document.getElementById('signup-pw-error');
+      errId.classList.add('hidden'); errPw.classList.add('hidden'); let isValid = true;
+      if (!/^[A-Za-z]+$/.test(id)) { errId.innerText = "아이디는 영어로만 입력해야 합니다."; errId.classList.remove('hidden'); isValid = false; }
+      if (!/[A-Z]/.test(pw) || !/[a-z]/.test(pw) || !/[0-9]/.test(pw) || !/[!@#$%^&*(),.?":{}|<>]/.test(pw)) { errPw.innerText = "대/소문자, 숫자, 특수문자를 최소 1개 이상 모두 포함해야 합니다."; errPw.classList.remove('hidden'); isValid = false; }
+
+      if (isValid) {
+        if (!fbUser) { window.showModal("서버 연결 대기중입니다. 잠시 후 시도해주세요.", false, false, null); return; }
+        try {
+          const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'registered_users'); const snap = await getDocs(usersRef);
+          if (snap.docs.map(d => d.data()).some(u => u.id === id)) { errId.innerText = "이미 사용중인 아이디입니다."; errId.classList.remove('hidden'); return; }
+          await setDoc(doc(collection(db, 'artifacts', appId, 'public', 'data', 'registered_users')), { id, pw });
+          await setDoc(doc(db, 'artifacts', appId, 'users', fbUser.uid, 'session', 'current'), { activeId: id });
+          localStorage.setItem('nop_saved_auth', JSON.stringify({ id, pw }));
+          window.showModal("가입이 완료되었습니다! 안전하게 자동 로그인 되었습니다.", false, false, () => { window.closeSignupModal(); });
+        } catch(e) { window.showModal("서버 통신 에러가 발생했습니다.", false, false, null); }
+      }
+    };
+
+    window.handleLogin = async () => {
+      const id = document.getElementById('login-id').value.trim(); const pw = document.getElementById('login-pw').value;
+      const err = document.getElementById('login-error'); err.classList.add('hidden');
+      if (!fbUser) return;
+      try {
+        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'registered_users');
+        const user = (await getDocs(usersRef)).docs.map(d => d.data()).find(u => u.id === id && u.pw === pw);
+        if (user) { await setDoc(doc(db, 'artifacts', appId, 'users', fbUser.uid, 'session', 'current'), { activeId: id }); localStorage.setItem('nop_saved_auth', JSON.stringify({ id, pw })); window.closeLoginModal(); } 
+        else { err.innerText = "아이디 또는 비밀번호가 일치하지 않습니다."; err.classList.remove('hidden'); }
+      } catch(e) { window.showModal("로그인 중 에러가 발생했습니다.", false, false, null); }
+    };
+
+    window.handleLogout = () => {
+      window.showModal("로그아웃 하시겠습니까?", true, false, async () => {
+        if (fbUser) {
+          localStorage.removeItem('nop_saved_auth');
+          await setDoc(doc(db, 'artifacts', appId, 'users', fbUser.uid, 'session', 'current'), { activeId: null });
+          document.getElementById('recent-projects-section').classList.add('hidden'); state.currentProjectId = null; state.currentProjectName = '새 프로젝트';
+        }
+      });
+    };
+
+    window.checkLoginState = () => {
+      const authButtons = document.getElementById('auth-buttons'); const authProfile = document.getElementById('auth-profile');
+      const demoBadge = document.getElementById('demo-badge'); const editorBadge = document.getElementById('editor-status-badge');
+      const greeting = document.getElementById('profile-greeting'); const initial = document.getElementById('profile-initial');
+
+      if (state.loggedInUser) {
+        authButtons.classList.add('hidden'); authButtons.classList.remove('flex'); authProfile.classList.remove('hidden'); authProfile.classList.add('flex'); demoBadge.classList.add('hidden'); demoBadge.classList.remove('flex');
+        greeting.innerHTML = `<b>${state.loggedInUser}</b> 님`; initial.innerText = state.loggedInUser.charAt(0).toUpperCase();
+        editorBadge.innerText = `[클라우드 연동됨]`; editorBadge.classList.remove('text-gray-400'); editorBadge.classList.add('text-cyan-400', 'border-cyan-500/30');
+      } else {
+        authButtons.classList.remove('hidden'); authButtons.classList.add('flex'); authProfile.classList.add('hidden'); authProfile.classList.remove('flex'); demoBadge.classList.remove('hidden'); demoBadge.classList.add('flex');
+        demoBadge.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 무료 데모버전`; editorBadge.innerText = "무료 데모 (저장 불가)"; editorBadge.classList.add('text-gray-400'); editorBadge.classList.remove('text-cyan-400', 'border-cyan-500/30');
+      }
+      window.updateIcons();
+    };
+
+    // --- 시간 포맷 함수 ---
+    window.formatTime = (seconds) => {
+      if (isNaN(seconds)) return "00:00:00:00";
+      const pad = (n) => n.toString().padStart(2, '0'); const m = Math.floor(seconds / 60); const s = Math.floor(seconds % 60); const ms = Math.floor((seconds % 1) * 30);
+      return `00:${pad(m)}:${pad(s)}:${pad(ms)}`;
+    };
+
+    // --- DOM Elements & Video Logic ---
+    const videoEl = document.getElementById('main-video'); const bgAudioEl = document.getElementById('bg-audio'); 
+    const previewWrapper = document.getElementById('preview-wrapper');
+    const overlayContainer = document.getElementById('overlay-container'); const emptyState = document.getElementById('empty-state');
+    const btnPlay = document.getElementById('btn-play'); const timeCurrent = document.getElementById('time-current');
+    const timeDuration = document.getElementById('time-duration'); const btnFullscreen = document.getElementById('btn-fullscreen');
+    const previewContainer = document.getElementById('preview-container'); const audioStatus = document.getElementById('audio-status-text');
+    
+    const timelineEmpty = document.getElementById('timeline-empty'); const timelineContainer = document.getElementById('timeline-container');
+    const timelineRuler = document.getElementById('timeline-ruler'); const playhead = document.getElementById('playhead');
+    const trimBar = document.getElementById('trim-bar'); const trimStartHandle = document.getElementById('trim-start-handle');
+    const trimEndHandle = document.getElementById('trim-end-handle'); const timelineOverlays = document.getElementById('timeline-overlays');
+
+    // Fullscreen Toggle
+    btnFullscreen.addEventListener('click', () => {
+      state.isFullscreen = !state.isFullscreen;
+      if (state.isFullscreen) {
+        previewContainer.classList.add('fixed', 'inset-0', 'z-[9999]', 'bg-black'); previewContainer.classList.remove('relative', 'flex-1', 'bg-[#0A0A0A]');
+        btnFullscreen.innerHTML = '<i data-lucide="minimize" class="w-4 h-4"></i>';
+      } else {
+        previewContainer.classList.remove('fixed', 'inset-0', 'z-[9999]', 'bg-black'); previewContainer.classList.add('relative', 'flex-1', 'bg-[#0A0A0A]');
+        btnFullscreen.innerHTML = '<i data-lucide="maximize" class="w-4 h-4"></i>';
+      }
+      window.updateIcons();
+    });
+
+    // File Uploads
+    document.getElementById('upload-video').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        state.videoFile = file; state.videoUrl = URL.createObjectURL(file);
+        if(!state.overlays.length && state.trimEnd === 100 && !state.pendingQuickTool) {
+          state.filters = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0 }; state.trimStart = 0;
+        }
+        videoEl.src = state.videoUrl;
+        emptyState.classList.add('hidden'); previewWrapper.classList.remove('hidden');
+        timelineEmpty.classList.add('hidden'); timelineContainer.classList.remove('hidden');
+        if(state.pendingQuickTool === 'cut') {
+           window.setRightTab('video');
+           state.pendingQuickTool = null;
+        } else {
+           window.setLeftTab('media'); 
+        }
+        window.updateExportBtn();
+      }
+      e.target.value = '';
+    });
+
+    document.getElementById('upload-audio').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        state.bgAudioUrl = URL.createObjectURL(file);
+        bgAudioEl.src = state.bgAudioUrl;
+        bgAudioEl.volume = state.bgAudioVolume / 100;
+        audioStatus.classList.remove('hidden');
+        window.setLeftTab('audio');
+      }
+      e.target.value = '';
+    });
+
+    window.updateAudioVolume = (vol) => {
+      state.bgAudioVolume = vol;
+      bgAudioEl.volume = vol / 100;
+    };
+
+    // Video Events
+    videoEl.addEventListener('loadedmetadata', () => {
+      state.duration = videoEl.duration || 0; 
+      if(state.trimEnd === 100 || state.trimEnd > state.duration) state.trimEnd = videoEl.duration || 0;
+      previewWrapper.style.aspectRatio = videoEl.videoWidth / videoEl.videoHeight;
+      const pad = (n) => n.toString().padStart(2, '0');
+      timeDuration.innerText = `00:${pad(Math.floor(state.duration/60))}:${pad(Math.floor(state.duration%60))}:00`;
+      
+      window.startNewProject(); 
+      
+      if(state.pendingQuickTool === 'autoColor') {
+        state.filters = { brightness: 115, contrast: 120, saturation: 130, grayscale: 0 };
+        window.setRightTab('adjust'); window.applyFilters();
+        window.showModal("자동 색보정이 적용되었습니다.\n(밝기, 대비, 채도 증가)", false, false, null);
+      }
+      state.pendingQuickTool = null;
+      window.renderRuler(); window.renderAll();
+    });
+
+    videoEl.addEventListener('timeupdate', () => {
+      if (!state.isDraggingTime && !state.draggingTrim) {
+        state.currentTime = videoEl.currentTime;
+        timeCurrent.innerText = window.formatTime(state.currentTime);
+        window.updatePlayhead(); window.renderOverlayDOMs();
+        
+        if (!state.isExporting && state.isPlaying && state.currentTime >= state.trimEnd) {
+          videoEl.pause(); if(state.bgAudioUrl) bgAudioEl.pause();
+          state.isPlaying = false;
+          const iconPlay = document.getElementById('icon-play'); if(iconPlay) iconPlay.setAttribute('data-lucide', 'play'); window.updateIcons();
+          videoEl.currentTime = state.trimStart;
+        }
+      }
+    });
+
+    // Play/Pause Sync
+    window.togglePlay = () => {
+      if (!state.videoUrl) return;
+      const iconPlay = document.getElementById('icon-play');
+      if (state.isPlaying) { 
+        videoEl.pause(); if(state.bgAudioUrl) bgAudioEl.pause();
+        state.isPlaying = false; if(iconPlay) iconPlay.setAttribute('data-lucide', 'play'); 
+      } else { 
+        if (state.currentTime < state.trimStart || state.currentTime >= state.trimEnd) videoEl.currentTime = state.trimStart; 
+        videoEl.play(); 
+        if(state.bgAudioUrl) { bgAudioEl.currentTime = videoEl.currentTime; bgAudioEl.play(); }
+        state.isPlaying = true; if(iconPlay) iconPlay.setAttribute('data-lucide', 'pause'); 
+      }
+      window.updateIcons();
+    };
+    btnPlay.addEventListener('click', window.togglePlay); 
+    videoEl.addEventListener('click', window.togglePlay);
+
+    // Filters & Overlays
+    window.applyFilters = () => { videoEl.style.filter = `brightness(${state.filters.brightness}%) contrast(${state.filters.contrast}%) saturate(${state.filters.saturation}%) grayscale(${state.filters.grayscale}%)`; };
+    window.applyPresetFilter = (preset) => {
+      if(preset === 'cinematic') state.filters = { brightness: 90, contrast: 130, saturation: 110, grayscale: 0 };
+      if(preset === 'vintage') state.filters = { brightness: 110, contrast: 90, saturation: 80, grayscale: 0 };
+      if(preset === 'bw') state.filters = { brightness: 100, contrast: 120, saturation: 0, grayscale: 100 };
+      if(preset === 'cyberpunk') state.filters = { brightness: 100, contrast: 150, saturation: 150, grayscale: 0 };
+      if(preset === 'reset') state.filters = { brightness: 100, contrast: 100, saturation: 100, grayscale: 0 };
+      window.applyFilters(); window.setRightTab('adjust');
+    };
+
+    window.generateId = () => { return Math.random().toString(36).substr(2, 9); };
+    window.addTextOverlay = () => { state.overlays.push({ id: window.generateId(), type: 'text', content: '새 텍스트', x: 50, y: 50, fontSize: 10, color: '#ffffff', fontFamily: 'Arial', fontWeight: 'bold', fontStyle: 'normal', strokeColor: '#000000', strokeWidth: 0, opacity: 100, shadowStrength: 4, startTime: 0, endTime: state.duration || 9999 }); window.setRightTab('text'); window.renderAll(); };
+    document.getElementById('upload-image').addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { const url = URL.createObjectURL(file); const img = new Image(); img.src = url; img.onload = () => { state.overlays.push({ id: window.generateId(), type: 'image', url: url, imgElement: img, x: 50, y: 50, width: 30, startTime: 0, endTime: state.duration || 9999 }); window.setRightTab('text'); window.renderAll(); }; } e.target.value = ''; });
+    window.updateOverlay = (id, key, value) => { const ov = state.overlays.find(o => o.id === id); if (ov) { ov[key] = value; window.renderOverlayDOMs(); if(key === 'startTime' || key === 'endTime') window.renderTimelineOverlays(); } };
+    window.removeOverlay = (id) => { state.overlays = state.overlays.filter(o => o.id !== id); window.renderAll(); };
+
+    // Drag on Preview
+    window.handleOverlayMouseDown = (e, id) => { e.stopPropagation(); state.draggingOverlayId = id; };
+    previewWrapper.addEventListener('mousemove', (e) => { if (!state.draggingOverlayId) return; const rect = previewWrapper.getBoundingClientRect(); const ov = state.overlays.find(o => o.id === state.draggingOverlayId); if (ov) { ov.x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)); ov.y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100)); window.renderOverlayDOMs(); window.setRightTab('text'); } });
+    previewWrapper.addEventListener('mouseup', () => { state.draggingOverlayId = null; }); previewWrapper.addEventListener('mouseleave', () => { state.draggingOverlayId = null; });
+
+    // Render Overlays
+    window.renderOverlayDOMs = () => {
+      overlayContainer.innerHTML = '';
+      state.overlays.forEach(ov => {
+        if (state.currentTime < ov.startTime || state.currentTime > ov.endTime) return;
+        const el = document.createElement('div');
+        el.className = `absolute drop-shadow-xl cursor-move pointer-events-auto transition-colors border ${state.draggingOverlayId === ov.id ? 'border-cyan-500 bg-white/5' : 'border-transparent hover:border-white/30'}`;
+        el.style.left = ov.x + '%'; el.style.top = ov.y + '%'; el.style.transform = 'translate(-50%, -50%)';
+        
+        if (ov.type === 'text') {
+          el.style.color = ov.color; el.style.fontSize = `max(16px, ${ov.fontSize * 0.5}vh)`;
+          el.style.fontFamily = ov.fontFamily || 'sans-serif'; el.style.fontWeight = ov.fontWeight || 'bold'; el.style.fontStyle = ov.fontStyle || 'normal';
+          el.style.opacity = (ov.opacity !== undefined ? ov.opacity : 100) / 100; el.style.whiteSpace = 'nowrap';
+          el.style.webkitTextStroke = ov.strokeWidth > 0 ? `${ov.strokeWidth * 0.05}vh ${ov.strokeColor}` : '0';
+          el.style.textShadow = ov.shadowStrength > 0 ? `0 ${ov.shadowStrength * 0.2}vh ${ov.shadowStrength * 0.3}vh rgba(0,0,0,0.8)` : 'none';
+          el.innerText = ov.content;
+        } else {
+          el.style.width = ov.width + '%';
+          const img = document.createElement('img'); img.src = ov.url || ''; img.className = "w-full h-auto pointer-events-none rounded shadow-md border border-white/10"; img.draggable = false;
+          el.appendChild(img);
+        }
+        el.addEventListener('mousedown', (e) => window.handleOverlayMouseDown(e, ov.id));
+        overlayContainer.appendChild(el);
+      });
+    };
+
+    // Timeline Interaction
+    window.renderRuler = () => { timelineRuler.innerHTML = ''; for (let i = 0; i < 20; i++) { const div = document.createElement('div'); div.className = "flex-1 border-l border-gray-800 pl-1 h-2"; const t = (state.duration / 20) * i; const pad = (n) => n.toString().padStart(2, '0'); div.innerText = `${pad(Math.floor(t / 60))}:${pad(Math.floor(t % 60))}`; timelineRuler.appendChild(div); } };
+    window.renderTimelineOverlays = () => {
+      timelineOverlays.innerHTML = ''; if(state.duration === 0) return;
+      state.overlays.forEach(ov => {
+        const track = document.createElement('div'); track.className = "h-8 bg-[#1B2735] rounded border border-[#2D4566] relative flex items-center overflow-hidden pointer-events-none mb-1";
+        const bar = document.createElement('div'); bar.className = "absolute h-full bg-[#3482F6] opacity-80 border-l border-r border-[#60A5FA] flex items-center px-2 text-xs font-medium text-white shadow-sm";
+        bar.style.left = `${(ov.startTime / state.duration) * 100}%`; bar.style.width = `${((Math.min(ov.endTime, state.duration) - ov.startTime) / state.duration) * 100}%`;
+        bar.innerHTML = `<i data-lucide="type" class="w-3 h-3 mr-1"></i> ${ov.type === 'text' ? ov.content.substring(0, 10) : 'Image'}`;
+        track.appendChild(bar); timelineOverlays.appendChild(track);
+      });
+      window.updateIcons();
+    };
+    window.updatePlayhead = () => { if(state.duration > 0) playhead.style.left = `${(state.currentTime / state.duration) * 100}%`; };
+    window.updateTrimBar = () => { if(state.duration > 0) { trimBar.style.left = `${(state.trimStart / state.duration) * 100}%`; trimBar.style.width = `${((state.trimEnd - state.trimStart) / state.duration) * 100}%`; } };
+
+    document.addEventListener('mousemove', (e) => {
+      if (!timelineContainer || state.duration === 0) return; const rect = timelineContainer.getBoundingClientRect(); let percent = (e.clientX - rect.left) / rect.width; let newTime = Math.max(0, Math.min(1, percent)) * state.duration;
+      if (state.isDraggingTime) { videoEl.currentTime = newTime; state.currentTime = newTime; timeCurrent.innerText = window.formatTime(newTime); window.updatePlayhead(); window.renderOverlayDOMs(); } 
+      else if (state.draggingTrim) { if (state.draggingTrim === 'start') { state.trimStart = Math.min(newTime, state.trimEnd - 0.1); videoEl.currentTime = state.trimStart; } else if (state.draggingTrim === 'end') { state.trimEnd = Math.max(newTime, state.trimStart + 0.1); videoEl.currentTime = state.trimEnd; } window.updateTrimBar(); window.setRightTab('video'); }
+    });
+    document.addEventListener('mouseup', () => { state.isDraggingTime = false; state.draggingTrim = null; });
+    timelineContainer.addEventListener('mousedown', (e) => { if (e.target === trimStartHandle || e.target === trimEndHandle || trimStartHandle.contains(e.target) || trimEndHandle.contains(e.target)) return; state.isDraggingTime = true; let newTime = Math.max(0, Math.min(1, (e.clientX - timelineContainer.getBoundingClientRect().left) / timelineContainer.getBoundingClientRect().width)) * state.duration; videoEl.currentTime = newTime; state.currentTime = newTime; window.updatePlayhead(); });
+    trimStartHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); state.draggingTrim = 'start'; if(state.isPlaying) window.togglePlay(); }); trimEndHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); state.draggingTrim = 'end'; if(state.isPlaying) window.togglePlay(); });
+
+    // Tabs & UI Render
+    window.setLeftTab = (tab) => {
+      state.leftTab = tab; 
+      ['media', 'audio', 'text', 'effects'].forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if(el) el.className = `flex flex-col items-center gap-1 p-2 rounded hover:text-cyan-400 ${t === tab ? 'text-cyan-400' : ''}`;
+      });
+      const content = document.getElementById('left-panel-content');
+      
+      if (tab === 'media') { 
+        content.innerHTML = `<div class="space-y-4"><label class="flex items-center justify-center gap-2 w-full p-3 bg-[#232427] border border-[#3A3B3E] border-dashed rounded cursor-pointer hover:border-cyan-500 transition-all text-cyan-500"><i data-lucide="upload" class="w-4 h-4"></i><span class="text-sm font-medium text-gray-300">Import Video</span></label>${state.videoUrl ? `<div class="grid grid-cols-2 gap-2 mt-4"><div class="relative aspect-video bg-black rounded border border-cyan-500 overflow-hidden group"><video src="${state.videoUrl}" class="w-full h-full object-cover"></video><span class="absolute bottom-1 right-1 text-[10px] bg-black/70 px-1 rounded text-white">${state.duration.toFixed(1)}s</span></div></div>` : ''}</div>`; 
+        content.querySelector('label').addEventListener('click', () => { state.pendingQuickTool = null; document.getElementById('upload-video').click()}); 
+      } 
+      else if (tab === 'audio') {
+        content.innerHTML = `
+          <div class="space-y-6">
+            <button onclick="document.getElementById('upload-audio').click()" class="w-full py-3 bg-[#232427] hover:bg-[#2A2B2E] rounded-lg text-sm flex items-center justify-center gap-2 border border-cyan-900/50 text-cyan-400 shadow-sm transition-colors">
+              <i data-lucide="music" class="w-4 h-4"></i> 배경음악(BGM) 추가
+            </button>
+            ${state.bgAudioUrl ? `
+              <div class="bg-[#18191B] border border-[#3A3B3E] p-4 rounded-lg space-y-3">
+                <div class="flex items-center justify-between"><span class="text-xs text-white font-medium flex items-center gap-2"><i data-lucide="volume-2" class="w-4 h-4 text-green-400"></i> 오디오 볼륨 조절</span></div>
+                <input type="range" oninput="updateAudioVolume(this.value)" min="0" max="100" value="${state.bgAudioVolume}" class="w-full">
+                <div class="text-[10px] text-gray-500 text-center mt-2">비디오 재생 시 함께 재생됩니다.</div>
+              </div>
+            ` : `<div class="text-xs text-gray-500 text-center">오디오 트랙이 비어있습니다.</div>`}
+          </div>`;
+      }
+      else if (tab === 'effects') {
+        content.innerHTML = `
+          <div class="space-y-4">
+            <h3 class="text-xs font-bold text-gray-400 uppercase">프리셋 필터</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <button onclick="applyPresetFilter('cinematic')" class="p-3 bg-[#232427] border border-[#3A3B3E] rounded hover:border-cyan-500 text-white text-xs">시네마틱</button>
+              <button onclick="applyPresetFilter('vintage')" class="p-3 bg-[#232427] border border-[#3A3B3E] rounded hover:border-cyan-500 text-white text-xs">빈티지</button>
+              <button onclick="applyPresetFilter('bw')" class="p-3 bg-[#232427] border border-[#3A3B3E] rounded hover:border-cyan-500 text-white text-xs">클래식 흑백</button>
+              <button onclick="applyPresetFilter('cyberpunk')" class="p-3 bg-[#232427] border border-[#3A3B3E] rounded hover:border-cyan-500 text-white text-xs">사이버펑크</button>
+            </div>
+            <button onclick="applyPresetFilter('reset')" class="w-full mt-4 p-2 bg-[#18191B] border border-gray-600 rounded text-gray-400 hover:text-white text-xs">필터 초기화</button>
+          </div>`;
+      }
+      else if (tab === 'text') { 
+        content.innerHTML = `<div class="space-y-4"><button id="btn-add-text" class="w-full py-2 bg-[#232427] hover:bg-[#2A2B2E] rounded text-sm flex items-center justify-center gap-2 border border-[#3A3B3E] text-white"><i data-lucide="type" class="w-4 h-4"></i> Add Text</button><label class="w-full py-2 bg-[#232427] hover:bg-[#2A2B2E] rounded text-sm flex items-center justify-center gap-2 border border-[#3A3B3E] cursor-pointer text-white"><i data-lucide="image-plus" class="w-4 h-4"></i> Add Image</label></div>`; 
+        document.getElementById('btn-add-text').addEventListener('click', window.addTextOverlay); content.querySelector('label').addEventListener('click', () => document.getElementById('upload-image').click()); 
+      }
+      window.updateIcons();
+    };
+    
+    window.setRightTab = (tab) => { state.rightTab = tab; ['video', 'adjust', 'text'].forEach(t => { const el = document.getElementById('rtab-' + t); if(t === tab) el.className = "px-4 py-2 border-b-2 border-cyan-400 text-cyan-400 transition-colors"; else el.className = "px-4 py-2 border-b-2 border-transparent text-gray-400 hover:text-white transition-colors"; }); window.renderRightPanel(); };
+
+    window.renderRightPanel = () => {
+      const content = document.getElementById('right-panel-content');
+      if (!state.videoUrl) { content.innerHTML = '<div class="text-xs text-gray-500 text-center mt-10">미디어를 먼저 추가해주세요.</div>'; return; }
+
+      if (state.rightTab === 'video') {
+        content.innerHTML = `<div class="space-y-4"><div class="space-y-3 pb-6"><div class="flex items-center gap-2 text-white font-medium mb-2"><i data-lucide="split-square-horizontal" class="w-4 h-4 text-cyan-400"></i> Time Range (Trim)</div><div class="flex items-center gap-2 text-xs"><span class="w-12 text-gray-400">Start (s)</span><input type="number" id="inp-trim-start" min="0" max="${state.trimEnd - 0.1}" step="0.1" value="${state.trimStart.toFixed(1)}" class="flex-1 px-2 py-1"></div><div class="flex items-center gap-2 text-xs"><span class="w-12 text-gray-400">End (s)</span><input type="number" id="inp-trim-end" min="${state.trimStart + 0.1}" max="${state.duration}" step="0.1" value="${state.trimEnd.toFixed(1)}" class="flex-1 px-2 py-1"></div><p class="text-[10px] text-gray-500 mt-1">* 타임라인에서 좌우 핸들을 끌어서 조절할 수도 있습니다.</p></div></div>`;
+        document.getElementById('inp-trim-start').addEventListener('change', (e) => { let v = parseFloat(e.target.value); if(v >= 0 && v < state.trimEnd) { state.trimStart = v; window.updateTrimBar(); } window.renderRightPanel(); });
+        document.getElementById('inp-trim-end').addEventListener('change', (e) => { let v = parseFloat(e.target.value); if(v > state.trimStart && v <= state.duration) { state.trimEnd = v; window.updateTrimBar(); } window.renderRightPanel(); });
+      } else if (state.rightTab === 'adjust') {
+        content.innerHTML = `<div class="space-y-6">${[{ id: 'brightness', label: 'Brightness', icon: 'sun', max: 200 }, { id: 'contrast', label: 'Contrast', icon: 'contrast', max: 200 }, { id: 'saturation', label: 'Saturation', icon: 'droplets', max: 200 }, { id: 'grayscale', label: 'Grayscale', icon: 'layers', max: 100 }].map(f => `<div class="space-y-2"><div class="flex justify-between text-xs text-gray-300"><span class="flex items-center gap-1.5"><i data-lucide="${f.icon}" class="w-3.5 h-3.5"></i> ${f.label}</span><span class="font-mono text-cyan-500">${state.filters[f.id]}%</span></div><input type="range" id="filter-${f.id}" min="0" max="${f.max}" value="${state.filters[f.id]}" class="w-full"></div>`).join('')}</div>`;
+        ['brightness', 'contrast', 'saturation', 'grayscale'].forEach(f => { document.getElementById('filter-'+f).addEventListener('input', (e) => { state.filters[f] = e.target.value; window.applyFilters(); e.target.previousElementSibling.querySelector('.text-cyan-500').innerText = e.target.value + '%'; }); });
+      } else if (state.rightTab === 'text') {
+        if(state.overlays.length === 0){ content.innerHTML = '<div class="text-xs text-gray-500 text-center mt-10">추가된 오버레이가 없습니다.</div>'; } 
+        else {
+          content.innerHTML = '<div class="space-y-4"></div>'; const wrap = content.querySelector('.space-y-4');
+          state.overlays.forEach((ov, idx) => {
+            const div = document.createElement('div'); div.className = "bg-[#232427] border border-[#3A3B3E] rounded p-3 space-y-3";
+            let inner = `<div class="flex items-center justify-between mb-2"><span class="text-xs text-cyan-400 font-medium bg-[#18191B] px-1.5 py-0.5 rounded">${ov.type === 'text' ? 'T' : 'IMG'} Layer ${idx + 1}</span><button onclick="removeOverlay('${ov.id}')" class="text-gray-500 hover:text-red-400"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div>`;
+            if (ov.type === 'text') {
+              inner += `<div class="space-y-3"><input type="text" oninput="updateOverlay('${ov.id}', 'content', this.value)" value="${ov.content}" class="w-full bg-[#0A0A0A] border border-[#3A3B3E] rounded px-2 py-1.5 text-xs text-white outline-none"><div class="flex gap-2"><select onchange="updateOverlay('${ov.id}', 'fontFamily', this.value)" class="flex-1 bg-[#0A0A0A] border border-[#3A3B3E] rounded px-1 py-1 text-xs text-white outline-none"><option value="Arial" ${ov.fontFamily==='Arial'?'selected':''}>Arial</option><option value="'Courier New'" ${ov.fontFamily==="'Courier New'"?'selected':''}>Courier New</option><option value="'Times New Roman'" ${ov.fontFamily==="'Times New Roman'"?'selected':''}>Times New Roman</option><option value="Impact" ${ov.fontFamily==='Impact'?'selected':''}>Impact</option><option value="'Comic Sans MS'" ${ov.fontFamily==="'Comic Sans MS'"?'selected':''}>Comic Sans</option><option value="Verdana" ${ov.fontFamily==='Verdana'?'selected':''}>Verdana</option></select><button onclick="updateOverlay('${ov.id}', 'fontWeight', '${ov.fontWeight === 'bold' ? 'normal' : 'bold'}')" class="px-2 py-1 bg-[#0A0A0A] border border-[#3A3B3E] rounded text-xs ${ov.fontWeight==='bold'?'text-cyan-400 border-cyan-400':'text-gray-400'}"><i data-lucide="bold" class="w-3 h-3"></i></button><button onclick="updateOverlay('${ov.id}', 'fontStyle', '${ov.fontStyle === 'italic' ? 'normal' : 'italic'}')" class="px-2 py-1 bg-[#0A0A0A] border border-[#3A3B3E] rounded text-xs ${ov.fontStyle==='italic'?'text-cyan-400 border-cyan-400':'text-gray-400'}"><i data-lucide="italic" class="w-3 h-3"></i></button></div><div class="flex items-center gap-2 text-xs"><span class="text-gray-400 shrink-0 w-8">색상</span><input type="color" oninput="updateOverlay('${ov.id}', 'color', this.value)" value="${ov.color}" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0 shrink-0"><span class="text-gray-400 shrink-0 ml-2 w-8">크기</span><input type="range" oninput="updateOverlay('${ov.id}', 'fontSize', parseFloat(this.value))" min="2" max="40" value="${ov.fontSize}" class="flex-1"></div><div class="flex items-center gap-2 text-xs"><span class="text-gray-400 shrink-0 w-8">외곽선</span><input type="color" oninput="updateOverlay('${ov.id}', 'strokeColor', this.value)" value="${ov.strokeColor || '#000000'}" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0 p-0 shrink-0"><input type="range" oninput="updateOverlay('${ov.id}', 'strokeWidth', parseFloat(this.value))" min="0" max="10" step="0.5" value="${ov.strokeWidth || 0}" class="flex-1"></div><div class="flex items-center gap-2 text-xs"><span class="text-gray-400 shrink-0 w-8">그림자</span><input type="range" oninput="updateOverlay('${ov.id}', 'shadowStrength', parseFloat(this.value))" min="0" max="20" value="${ov.shadowStrength !== undefined ? ov.shadowStrength : 4}" class="flex-1"></div><div class="flex items-center gap-2 text-xs"><span class="text-gray-400 shrink-0 w-8">투명도</span><input type="range" oninput="updateOverlay('${ov.id}', 'opacity', parseFloat(this.value))" min="0" max="100" value="${ov.opacity !== undefined ? ov.opacity : 100}" class="flex-1"></div></div>`;
+            } else { inner += `<div class="flex items-center gap-2 text-xs mt-2"><span class="text-gray-400">Scale</span><input type="range" oninput="updateOverlay('${ov.id}', 'width', parseFloat(this.value))" min="5" max="100" value="${ov.width}" class="w-full"></div>`; }
+            inner += `<div class="flex flex-col gap-2 mt-3 border-t border-[#3A3B3E] pt-3"><span class="text-xs text-cyan-400 font-medium flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> 표시 길이 (시간) 설정</span><div class="flex items-center gap-2 text-xs"><span class="text-gray-400 shrink-0 w-10">시작(s)</span><input type="number" onchange="updateOverlay('${ov.id}', 'startTime', Math.max(0, parseFloat(this.value)||0))" min="0" max="${ov.endTime}" step="0.1" value="${ov.startTime}" class="w-full bg-[#0A0A0A] border border-[#3A3B3E] rounded px-2 py-1 text-center outline-none focus:border-cyan-500"><span class="text-gray-400 shrink-0 w-10 text-center">종료(s)</span><input type="number" onchange="updateOverlay('${ov.id}', 'endTime', Math.min(state.duration, parseFloat(this.value)||state.duration))" min="${ov.startTime}" max="${state.duration}" step="0.1" value="${ov.endTime === 9999 ? state.duration.toFixed(1) : ov.endTime}" class="w-full bg-[#0A0A0A] border border-[#3A3B3E] rounded px-2 py-1 text-center outline-none focus:border-cyan-500"></div></div>`;
+            div.innerHTML = inner; wrap.appendChild(div);
+          });
+        }
+      }
+      window.updateIcons();
+    };
+    
+    window.renderAll = () => { window.applyFilters(); window.renderOverlayDOMs(); window.renderTimelineOverlays(); window.updateTrimBar(); window.updatePlayhead(); window.renderRightPanel(); };
+
+    // Export Logic
+    window.updateExportBtn = () => {
+      const btn = document.getElementById('btn-export'); const text = document.getElementById('export-text');
+      if (!state.videoUrl || state.isExporting) { btn.className = "flex items-center gap-1.5 px-6 py-1.5 rounded font-medium transition-all bg-[#2A2B2E] text-gray-500 cursor-not-allowed"; text.innerText = state.isExporting ? `Exporting... ${Math.round(state.exportProgress)}%` : 'Export'; } 
+      else { btn.className = "flex items-center gap-1.5 px-6 py-1.5 rounded font-medium transition-all bg-[#21E0C9] text-black hover:bg-[#1CC6B1]"; text.innerText = 'Export'; }
+    };
+
+    document.getElementById('btn-export').addEventListener('click', async () => {
+      if (!state.videoUrl || state.isExporting) return;
+      state.isExporting = true; state.exportProgress = 0; window.updateExportBtn();
+      
+      const canvas = document.getElementById('export-canvas'); const ctx = canvas.getContext('2d');
+      canvas.width = videoEl.videoWidth; canvas.height = videoEl.videoHeight;
+      
+      // 비디오 화면 캡처 스트림 가져오기
+      const canvasStream = canvas.captureStream(30);
+      const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
+      
+      // 원본 비디오의 오디오 트랙을 추출하여 결합 (배경음악 제외)
+      try {
+        const vidStream = videoEl.captureStream ? videoEl.captureStream() : videoEl.mozCaptureStream ? videoEl.mozCaptureStream() : null;
+        if (vidStream && vidStream.getAudioTracks().length > 0) {
+           combinedStream.addTrack(vidStream.getAudioTracks()[0]);
+        }
+      } catch (e) { console.log('Audio capture limited by browser sandbox.', e); }
+
+      const mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9' });
+      const chunks = []; mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${state.currentProjectName}_Export.webm`; a.click();
+        state.isExporting = false; state.exportProgress = 0; window.updateExportBtn();
+      };
+
+      videoEl.currentTime = state.trimStart; videoEl.pause();
+      await new Promise(resolve => { videoEl.onseeked = resolve; }); videoEl.onseeked = null; 
+      mediaRecorder.start(); videoEl.play();
+
+      function drawFrame() {
+        if (videoEl.currentTime >= state.trimEnd) { videoEl.pause(); mediaRecorder.stop(); return; }
+        state.exportProgress = Math.min(100, ((videoEl.currentTime - state.trimStart) / (state.trimEnd - state.trimStart)) * 100); window.updateExportBtn();
+        ctx.filter = `brightness(${state.filters.brightness}%) contrast(${state.filters.contrast}%) saturate(${state.filters.saturation}%) grayscale(${state.filters.grayscale}%)`;
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height); ctx.filter = 'none'; 
+        
+        const currentVidTime = videoEl.currentTime;
+        state.overlays.forEach(ov => {
+          if (currentVidTime >= ov.startTime && currentVidTime <= ov.endTime) {
+            const px = (ov.x / 100) * canvas.width; const py = (ov.y / 100) * canvas.height;
+            if (ov.type === 'text') {
+              ctx.font = `${ov.fontStyle || 'normal'} ${ov.fontWeight || 'bold'} ${(ov.fontSize / 100) * canvas.height}px ${ov.fontFamily || 'sans-serif'}`;
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.globalAlpha = (ov.opacity !== undefined ? ov.opacity : 100) / 100;
+              if (ov.shadowStrength > 0) { ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = (ov.shadowStrength / 100) * canvas.height * 0.5; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = (ov.shadowStrength / 100) * canvas.height * 0.2; } else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; }
+              if (ov.strokeWidth > 0) { ctx.lineWidth = (ov.strokeWidth / 100) * canvas.height * 0.05; ctx.strokeStyle = ov.strokeColor || '#000000'; ctx.strokeText(ov.content, px, py); }
+              ctx.fillStyle = ov.color; ctx.fillText(ov.content, px, py);
+              ctx.globalAlpha = 1.0; ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+            } else if (ov.type === 'image' && ov.imgElement) {
+              const imgWidth = (ov.width / 100) * canvas.width; const imgHeight = imgWidth * (ov.imgElement.height / ov.imgElement.width);
+              ctx.drawImage(ov.imgElement, px - imgWidth / 2, py - imgHeight / 2, imgWidth, imgHeight);
+            }
+          }
+        });
+        requestAnimationFrame(drawFrame);
+      }
+      drawFrame();
+    });
+
+    // Start App Default View
+    window.setLeftTab('media');
+    window.setRightTab('video');
+  </script>
+</body>
+</html>
