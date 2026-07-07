@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIX company２０１０</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <div class="container">
+            <div class="logo">LIX <span>company</span></div>
+            <nav>
+                <a href="#home">홈</a>
+                <a href="#about">회사소개</a>
+                <a href="#projects">프로젝트</a>
+                <a href="javascript:void(0);" onclick="openCommunity();" class="nav-community">커뮤니티</a>
+            </nav>
+        </div>
+    </header>
+
+    <section id="home" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <span class="badge">２０２６ 창단</span>
+                <h1>우리는 2010년생들이 만든<br><span class="highlight">LIX company</span>입니다.</h1>
+                <p>가장 젊은 시각으로 세상을 연결하는 디지털 창작 집단</p>
+                <div class="btn-group">
+                    <a href="#projects" class="btn primary">진행 중인 프로젝트</a>
+                    <button onclick="openCommunity();" class="btn secondary">커뮤니티 바로가기</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="about" class="about">
+        <div class="container">
+            <div class="section-title">
+                <h2>About LIX</h2>
+                <div class="bar"></div>
+            </div>
+            <div class="about-grid">
+                <div class="about-item">
+                    <h3>2010년생의 에너지</h3>
+                    <p>우리는 단순히 어린 팀이 아닙니다. 태어날 때부터 디지털 기기와 함께 자란 '진짜' 디지털 네이티브 세대로서, 우리 세대가 열광할 수 있는 서비스를 직접 설계합니다.</p>
+                </div>
+                <div class="about-item">
+                    <h3>새로운 연결</h3>
+                    <p>기술은 사람을 위해 존재해야 합니다. LIX는 파편화된 정보를 하나로 묶고, 사람과 장소를 잇는 새로운 연결 방식을 연구합니다.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="projects" class="projects">
+        <div class="container">
+            <div class="section-title">
+                <h2>Our Mission</h2>
+                <p>LIX company2010의 첫 번째 도전 과제입니다.</p>
+            </div>
+            <div class="project-card">
+                <div class="card-content">
+                    <div class="card-icon">📍</div>
+                    <h3>LIX 장소 맞추기 웹사이트</h3>
+                    <p>단순히 지도를 보는 것을 넘어, 우리 동네와 전 세계의 핫플레이스를 퀴즈 형식으로 맞추며 탐험하는 인터랙티브 게임 서비스입니다. 정교한 지도 데이터와 재미있는 게임 요소를 결합하여 개발 중입니다.</p>
+                    <span class="status">개발 진행 중 (Coming Soon)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="community-cta">
+        <div class="container">
+            <h2>함께 성장하는 즐거움</h2>
+            <p>LIX의 소식을 가장 빠르게 듣고 멤버들과 소통해보세요.</p>
+            <button onclick="openCommunity();" class="btn-large">LIX 커뮤니티 입장하기</button>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 202６ LIX company2010. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        function openCommunity() {
+            alert("죄송합니다! 현재 LIX 커뮤니티는 열심히 개설 중입니다.\n조금만 더 기다려주세요!");
+        }
+    </script>
+
+</body>
+</html>
